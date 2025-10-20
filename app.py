@@ -38,10 +38,13 @@ def chatbot_index():
 
 @server.route("/chatbot_responder", methods=["POST"])
 def chatbot_responder():
-    dados = request.get_json()
-    mensagem = dados.get("mensagem", "")
-    resposta = gerar_resposta(mensagem)
-    return jsonify({"resposta": resposta})
+    try:
+        dados = request.get_json()
+        mensagem = dados.get("mensagem", "")
+        resposta = gerar_resposta(mensagem)
+        return jsonify({"resposta": resposta})
+    except Exception as e:
+        return jsonify({"resposta": f"Erro interno: {str(e)}"}), 500
 
 # -----------------------------------------------------------------------------
 # 🧩 Carregamento de dados e layout

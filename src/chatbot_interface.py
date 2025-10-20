@@ -164,19 +164,12 @@ def register_chatbot_callbacks(app):
         loading_style = {"display": "block", "textAlign": "center", "padding": "10px"}
 
         try:
-            # Detectar se está rodando no Render ou localmente
-            if os.environ.get('RENDER'):
-                # Rodando no Render - usar URL do serviço
-                base_url = "https://dash-governanca-chatbot.onrender.com"
-            else:
-                # Rodando localmente
-                base_url = "http://127.0.0.1:8050"
-            
-            response = requests.post(f"{base_url}/chatbot_responder", json={"mensagem": message})
-            response.raise_for_status()
-            bot_response = response.json()["resposta"]
-        except requests.exceptions.RequestException as e:
-            bot_response = f"Erro ao conectar com o chatbot: {e}"
+            # Chamar função diretamente em vez de requisição HTTP
+            # Isso evita loop de requisições e erro 502 Bad Gateway
+            from src.chatbot import gerar_resposta
+            bot_response = gerar_resposta(message)
+        except Exception as e:
+            bot_response = f"Erro interno do chatbot: {str(e)}"
         
         bot_message_div = html.Div(bot_response, className="bot-message")
         updated_messages.append(bot_message_div)
