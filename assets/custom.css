@@ -1,0 +1,133 @@
+/* assets/custom.css - Estilos personalizados para o Dash Governança */
+
+/* Estilos gerais */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* Estilos para abas */
+.custom-tabs-container .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.custom-tab {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-bottom: none;
+    color: #6c757d;
+    padding: 10px 20px;
+    margin-right: 5px;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.3s ease;
+}
+
+.custom-tab:hover {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+.custom-tab--selected {
+    background-color: #2E86AB;
+    color: #ffffff;
+    border-color: #2E86AB;
+}
+
+/* Estilos para dropdowns */
+.dash-dropdown {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.dash-dropdown .Select-control {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+/* Estilos para cards */
+.card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: none;
+    transition: transform 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Estilos para botões */
+.btn-primary {
+    background-color: #2E86AB;
+    border-color: #2E86AB;
+    border-radius: 8px;
+    padding: 10px 20px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: #1e6a8a;
+    border-color: #1e6a8a;
+    transform: translateY(-1px);
+}
+
+/* Estilos para gráficos */
+.plotly-graph-div {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background-color: #ffffff;
+    padding: 15px;
+}
+
+/* Estilos para mensagens do chatbot */
+.user-message {
+    background-color: #2E86AB;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 18px 18px 5px 18px;
+    margin: 5px 0;
+    margin-left: 50px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.bot-message {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 10px 15px;
+    border-radius: 18px 18px 18px 5px;
+    margin: 5px 0;
+    margin-right: 50px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+/* Estilos para o container principal */
+.container-fluid {
+    padding: 20px;
+}
+
+/* Estilos para o header */
+h1 {
+    color: #2E86AB;
+    font-weight: 600;
+    margin-bottom: 30px;
+}
+
+/* Estilos para filtros */
+.mb-4 {
+    margin-bottom: 1.5rem;
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+    .card {
+        margin-bottom: 15px;
+    }
+    
+    .custom-tab {
+        padding: 8px 15px;
+        font-size: 14px;
+    }
+}
