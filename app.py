@@ -9,7 +9,7 @@ from src.layouts.main_layout import create_layout
 from src.utils.data_loader import load_metadata
 from src.callbacks import register_all
 from src.chatbot_interface import register_chatbot_callbacks
-from src.utils.data_cache import load_data_once
+from src.utils.data_cache import load_data_once, clear_cache
 
 # -----------------------------------------------------------------------------
 # 🔧 Configuração base do servidor Flask e do app Dash
@@ -18,7 +18,8 @@ server = Flask(__name__)
 
 external_stylesheets = [
     dbc.themes.BOOTSTRAP,
-    "/assets/custom.css"  # CSS customizado
+    "/assets/custom.css",  # CSS customizado
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"  # Font Awesome para ícones
 ]
 
 app = Dash(
@@ -46,9 +47,35 @@ def chatbot_responder():
     except Exception as e:
         return jsonify({"resposta": f"Erro interno: {str(e)}"}), 500
 
+@server.route("/clear_cache", methods=["POST"])
+def clear_cache_endpoint():
+    """Endpoint para limpar o cache de dados via API"""
+    try:
+        from src.utils.data_cache import clear_cache, get_cache_info
+        info_antes = get_cache_info()
+        clear_cache()
+        info_depois = get_cache_info()
+        return jsonify({
+            "status": "success",
+            "message": "Cache limpo com sucesso",
+            "antes": {
+                "arquivos_em_cache": info_antes['data_files_cached'],
+                "memoria_mb": round(info_antes['total_memory_usage'], 2)
+            },
+            "depois": {
+                "arquivos_em_cache": info_depois['data_files_cached'],
+                "memoria_mb": round(info_depois['total_memory_usage'], 2)
+            }
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 # -----------------------------------------------------------------------------
 # 🧩 Carregamento de dados e layout
 # -----------------------------------------------------------------------------
+# Limpa o cache para garantir dados atualizados com enriquecimento
+clear_cache()
+
 # Carrega o DataFrame e metadados ao iniciar
 df_full = load_data_once("data/meu_arquivo.csv")
 meta = load_metadata("data/meu_arquivo.csv")
