@@ -62,10 +62,30 @@ def create_layout(meta):
 
     tabs = dbc.Tabs(
         [
-            dbc.Tab(label="Visão Geral", tab_id="visao-geral", className="custom-tab", active_tab_class_name="custom-tab--selected"),
-            dbc.Tab(label="Fluxos/Serviços", tab_id="fluxos-servicos", className="custom-tab", active_tab_class_name="custom-tab--selected"),
-            dbc.Tab(label="Formulários", tab_id="formularios", className="custom-tab", active_tab_class_name="custom-tab--selected"),
-            dbc.Tab(label="Campos", tab_id="campos", className="custom-tab", active_tab_class_name="custom-tab--selected"),
+            dbc.Tab(
+                label="📊 Visão Geral",
+                tab_id="visao-geral",
+                className="custom-tab",
+                active_tab_class_name="custom-tab--selected"
+            ),
+            dbc.Tab(
+                label="🔄 Fluxos/Serviços",
+                tab_id="fluxos-servicos",
+                className="custom-tab",
+                active_tab_class_name="custom-tab--selected"
+            ),
+            dbc.Tab(
+                label="📄 Formulários",
+                tab_id="formularios",
+                className="custom-tab",
+                active_tab_class_name="custom-tab--selected"
+            ),
+            dbc.Tab(
+                label="📋 Campos",
+                tab_id="campos",
+                className="custom-tab",
+                active_tab_class_name="custom-tab--selected"
+            ),
         ],
         id="main-tabs",
         active_tab="visao-geral",

@@ -8,6 +8,33 @@ import dash_bootstrap_components as dbc
 from dash import html
 import plotly.graph_objects as go
 
+def _is_padronizado(nome_campo: str) -> int:
+    """
+    Determina se um campo é padronizado baseado na fórmula PowerBI.
+    Padronizado = 1 se:
+    - LEFT([nomeCampo], 3) IN {"TXT", "CBO", "RAD", "CHK"} OU
+    - LEFT([nomeCampo], 5) IN {"CPF_", "CNP_", "CEP_", "TEL_", "EMA_"}
+    Padronizado = 0 caso contrário
+    """
+    if pd.isna(nome_campo) or str(nome_campo) == 'nan':
+        return 0
+    
+    nome_campo_str = str(nome_campo)
+    
+    # Verificar prefixos de 3 letras (sem underscore)
+    if len(nome_campo_str) >= 3:
+        prefixo_3 = nome_campo_str[:3]
+        if prefixo_3 in ["TXT", "CBO", "RAD", "CHK"]:
+            return 1
+    
+    # Verificar prefixos de 5 letras (com underscore)
+    if len(nome_campo_str) >= 5:
+        prefixo_5 = nome_campo_str[:5]
+        if prefixo_5 in ["CPF_", "CNP_", "CEP_", "TEL_", "EMA_"]:
+            return 1
+    
+    return 0
+
 def _create_empty_figure(message):
     """Cria uma figura vazia com mensagem"""
     fig = go.Figure()
@@ -66,15 +93,11 @@ def register_callbacks(app):
             media_campos_formulario = round(df.groupby("formulario")["nomeCampo"].nunique().mean(), 2) if "formulario" in df.columns and "nomeCampo" in df.columns else 0
 
             # Calcular quantidade total de campos padronizados (únicos)
-            padrao_prefixos = ["TXT_", "CBO_", "CHK_", "RAD_", "BTN_", "TAB_", "ICO_", "IMG_", "LBL_", "DAT_", "NUM_", "TEL_", "EML_", "URL_"]
             if "nomeCampo" in df.columns:
-                df["is_padronizado"] = df["nomeCampo"].apply(
-                    lambda x: any(str(x).startswith(prefix) for prefix in padrao_prefixos) 
-                    if pd.notna(x) and str(x) != 'nan' else False
-                )
+                df["is_padronizado"] = df["nomeCampo"].apply(_is_padronizado)
                 
                 # Contar campos padronizados únicos em todo o dataframe
-                campos_padronizados_unicos = df[df["is_padronizado"] == True]["nomeCampo"].nunique()
+                campos_padronizados_unicos = df[df["is_padronizado"] == 1]["nomeCampo"].nunique()
                 qtd_campos_padrao = str(campos_padronizados_unicos)
             else:
                 qtd_campos_padrao = "0"
@@ -281,12 +304,8 @@ def _create_analise_fluxo_complexidade_chart(df):
         fluxo_qtd_campos = df.groupby("fluxo")["nomeCampo"].nunique().reset_index(name="qtd_campos_por_fluxo")
         
         # Calcular padronização (risco): quanto menor a padronização, maior o risco
-        padrao_prefixos = ["TXT_", "CBO_", "CHK_", "RAD_", "BTN_", "TAB_", "ICO_", "IMG_", "LBL_", "DAT_", "NUM_", "TEL_", "EML_", "URL_"]
         df_work = df.copy()
-        df_work["is_padronizado"] = df_work["nomeCampo"].apply(
-            lambda x: any(str(x).startswith(prefix) for prefix in padrao_prefixos) 
-            if pd.notna(x) and str(x) != 'nan' else False
-        )
+        df_work["is_padronizado"] = df_work["nomeCampo"].apply(_is_padronizado)
         
         # Calcular % de padronização por fluxo (baseado em campos únicos)
         percentuais_fluxos = []
@@ -294,7 +313,7 @@ def _create_analise_fluxo_complexidade_chart(df):
             df_fluxo = df_work[df_work['fluxo'] == fluxo]
             total_campos_unicos = df_fluxo['nomeCampo'].nunique()
             if total_campos_unicos > 0:
-                campos_padronizados_unicos = df_fluxo[df_fluxo['is_padronizado'] == True]['nomeCampo'].nunique()
+                campos_padronizados_unicos = df_fluxo[df_fluxo['is_padronizado'] == 1]['nomeCampo'].nunique()
                 pct_fluxo = (campos_padronizados_unicos / total_campos_unicos) * 100
                 percentuais_fluxos.append({'fluxo': fluxo, 'pct_padronizacao': pct_fluxo})
         
