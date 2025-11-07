@@ -4,6 +4,7 @@ from .overview_callbacks import register_callbacks as register_overview_callback
 from .fluxos_callbacks import register_callbacks as register_fluxos_callbacks
 from .formularios_callbacks import register_callbacks as register_formularios_callbacks
 from .campos_callbacks import register_callbacks as register_campos_callbacks
+from .biblioteca_callbacks import register_callbacks as register_biblioteca_callbacks
 
 def register_all(app: Dash):
     """
@@ -16,3 +17,4 @@ def register_all(app: Dash):
     register_fluxos_callbacks(app)
     register_formularios_callbacks(app)
     register_campos_callbacks(app)
+    register_biblioteca_callbacks(app)

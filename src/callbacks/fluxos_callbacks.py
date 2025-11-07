@@ -3,145 +3,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import json
-from src.utils.data_cache import get_filtered_data, get_sampled_data_for_charts
+import os
+from src.utils.data_loader import stream_filtered_df
+from src.utils.data_processor import calculate_kpis, calculate_padronizacao_por_fluxo, prepare_chart_data
 from src.pages.fluxos import fluxos_layout
 import dash_bootstrap_components as dbc
 from dash import html
 
-def _get_tipo_componente(nome_campo: str) -> str:
-    """
-    Determina o tipo de componente baseado nos prefixos do nomeCampo.
-    Adaptado da fórmula PowerBI Categorias_Campos1.
-    """
-    if pd.isna(nome_campo) or str(nome_campo) == 'nan':
-        return "Outros/Sem Padrão"
-    
-    nome_campo_str = str(nome_campo)
-    
-    # Prefixos de 3 letras
-    if len(nome_campo_str) >= 3:
-        prefixo_3 = nome_campo_str[:3]
-        if prefixo_3 == "LBL":
-            return "Label"
-        elif prefixo_3 == "TXT":
-            return "TextBox"
-        elif prefixo_3 == "TXA":
-            return "Textarea"
-        elif prefixo_3 == "CHK":
-            return "CheckBox"
-        elif prefixo_3 == "RAD":
-            return "RadioButton"
-        elif prefixo_3 == "CBO":
-            return "Combobox"
-        elif prefixo_3 == "IMG":
-            return "Imagem"
-        elif prefixo_3 == "DT_":
-            return "Data"
-        elif prefixo_3 == "LNK":
-            return "Hiperlink"
-        elif prefixo_3 == "ARQ":
-            return "Arquivo"
-        elif prefixo_3 == "MAP":
-            return "Mapa"
-        elif prefixo_3 == "ENT":
-            return "Entidade"
-        elif prefixo_3 == "FT_":
-            return "Foto"
-        elif prefixo_3 == "PLT":
-            return "Planta"
-        elif prefixo_3 == "BTN":
-            return "Button"
-        elif prefixo_3 == "GRD":
-            return "Grid"
-        elif prefixo_3 == "CSM":
-            return "Consumo"
-        elif prefixo_3 == "AGD":
-            return "Agendamento"
-        elif prefixo_3 == "FLX":
-            return "Fluxo"
-    
-    # Prefixos de 4 letras
-    if len(nome_campo_str) >= 4:
-        prefixo_4 = nome_campo_str[:4]
-        if prefixo_4 == "MULT":
-            return "Múltiplos"
-        elif prefixo_4 == "CMIE":
-            return "Campos Integrados"
-        elif prefixo_4 == "CLAS":
-            return "Classificação"
-        elif prefixo_4 == "BTI_":
-            return "Botão de Integração"
-        elif prefixo_4 == "UORG":
-            return "Sigla"
-    
-    # Prefixos de 5 letras
-    if len(nome_campo_str) >= 5:
-        prefixo_5 = nome_campo_str[:5]
-        if prefixo_5 == "NUM_":
-            return "Numérico"
-        elif prefixo_5 == "VAL_":
-            return "Valor Monetário"
-        elif prefixo_5 == "ID_":
-            return "Identificador"
-        elif prefixo_5 == "OBS_":
-            return "Observação"
-        elif prefixo_5 == "DESC":
-            return "Descrição"
-        elif prefixo_5 == "END_":
-            return "Endereço"
-        elif prefixo_5 == "TEL_":
-            return "Telefone"
-        elif prefixo_5 == "EMA_":
-            return "E-mail"
-        elif prefixo_5 == "CPF_":
-            return "CPF"
-        elif prefixo_5 == "CNP_":
-            return "CNPJ"
-        elif prefixo_5 == "CEP_":
-            return "CEP"
-        elif prefixo_5 == "URL_":
-            return "URL"
-        elif prefixo_5 == "GEO_":
-            return "Georreferência"
-        elif prefixo_5 == "ASS_":
-            return "Assinatura"
-        elif prefixo_5 == "TAB_":
-            return "Tabela"
-        elif prefixo_5 == "CON_":
-            return "Contato"
-        elif prefixo_5 == "PRO_":
-            return "Produto"
-        elif prefixo_5 == "SER_":
-            return "Serviço"
-    
-    return "Outros/Sem Padrão"
-
-def _is_padronizado(nome_campo: str) -> int:
-    """
-    Determina se um campo é padronizado baseado na fórmula PowerBI.
-    Padronizado = 1 se:
-    - LEFT([nomeCampo], 3) IN {"TXT", "CBO", "RAD", "CHK"} OU
-    - LEFT([nomeCampo], 5) IN {"CPF_", "CNP_", "CEP_", "TEL_", "EMA_"}
-    Padronizado = 0 caso contrário
-    """
-    if pd.isna(nome_campo) or str(nome_campo) == 'nan':
-        return 0
-    
-    nome_campo_str = str(nome_campo)
-    
-    # Verificar prefixos de 3 letras (sem underscore)
-    if len(nome_campo_str) >= 3:
-        prefixo_3 = nome_campo_str[:3]
-        if prefixo_3 in ["TXT", "CBO", "RAD", "CHK"]:
-            return 1
-    
-    # Verificar prefixos de 5 letras (com underscore)
-    if len(nome_campo_str) >= 5:
-        prefixo_5 = nome_campo_str[:5]
-        if prefixo_5 in ["CPF_", "CNP_", "CEP_", "TEL_", "EMA_"]:
-            return 1
-    
-    return 0
+# Caminho do arquivo CSV
+CSV_PATH = "data/meu_arquivo.csv"
 
 def _create_empty_figure(message):
     """Cria uma figura vazia com mensagem"""
@@ -163,65 +33,9 @@ def _create_empty_figure(message):
     )
     return fig
 
-def _create_fluxos_hierarquia_tree(df):
-    """Cria diagrama hierárquico (treemap) mostrando Fluxo -> Serviço -> Formulário -> Campos"""
-    if df.empty or 'fluxo' not in df.columns or 'servico' not in df.columns or 'formulario' not in df.columns or 'nomeCampo' not in df.columns:
-        return _create_empty_figure("Dados não disponíveis")
-    
-    try:
-        # Preparar dados hierárquicos
-        # Agrupar por fluxo, serviço, formulário e campo, contando ocorrências
-        df_hierarquia = df.groupby(['fluxo', 'servico', 'formulario', 'nomeCampo']).size().reset_index(name='Qtd')
-        
-        # Renomear colunas para o formato esperado pelo treemap
-        df_hierarquia = df_hierarquia.rename(columns={
-            'fluxo': 'Fluxo',
-            'servico': 'Serviço',
-            'formulario': 'Formulário',
-            'nomeCampo': 'Campo'
-        })
-        
-        # Limitar a quantidade de dados se houver muitos (para performance)
-        if len(df_hierarquia) > 10000:
-            # Amostrar mantendo representatividade por fluxo
-            df_hierarquia = df_hierarquia.groupby('Fluxo').apply(
-                lambda x: x.sample(min(500, len(x)), random_state=42)
-            ).reset_index(drop=True)
-        
-        # Criar o treemap
-        fig = px.treemap(
-            df_hierarquia,
-            path=["Fluxo", "Serviço", "Formulário", "Campo"],
-            values="Qtd",
-            color="Fluxo",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-            title="Estrutura Hierárquica - Fluxo > Serviço > Formulário > Campos"
-        )
-        
-        # Atualizar estilo
-        fig.update_traces(root_color="lightgray")
-        fig.update_layout(
-            template='plotly_white',
-            height=600,
-            margin=dict(t=50, l=10, r=10, b=10),
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            title=dict(
-                text="Estrutura Hierárquica - Fluxo > Serviço > Formulário > Campos",
-                font=dict(size=16, color="#212529"),
-                x=0.5,
-                xanchor='center'
-            ),
-            font=dict(color='#495057')
-        )
-        
-        return fig
-        
-    except Exception as e:
-        print(f"Erro ao criar diagrama hierárquico: {e}")
-        import traceback
-        traceback.print_exc()
-        return _create_empty_figure("Erro ao processar dados")
+# REMOVIDO: Funções _get_tipo_componente, _is_padronizado e _create_fluxos_hierarquia_tree
+# Agora usamos src.utils.data_processor que centraliza todo o processamento
+# O gráfico de hierarquia foi movido para a página Biblioteca (biblioteca_callbacks.py)
 
 def register_callbacks(app):
     @app.callback(
@@ -232,7 +46,6 @@ def register_callbacks(app):
         Output("percentual-padronizacao-fluxo", "figure"),
         Output("contagem-servico-por-fluxo", "figure"),
         Output("padronizacao-por-fluxo-tabela", "children"),
-        Output("fluxos-hierarquia-tree", "figure"),  # Adicionar este output
         Input("filtered-data-store", "data"),
         prevent_initial_call=False,
         allow_duplicate=True
@@ -240,87 +53,40 @@ def register_callbacks(app):
     def update_fluxos(filtered_data_json):
         if filtered_data_json is None:
             empty_fig = _create_empty_figure("Nenhum dado disponível")
-            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div("Nenhum dado disponível"), empty_fig
+            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div("Nenhum dado disponível")
 
         # Busca dados diretamente do cache usando os filtros
         filters = filtered_data_json
-        
-        # Usa dados enriquecidos para TODOS os cálculos (incluindo cards)
-        # Isso garante que os dados sejam consistentes entre cards, gráficos e tabela
-        # Primeiro obtém dados filtrados
-        df = get_filtered_data("data/meu_arquivo.csv", 
+        df = stream_filtered_df(CSV_PATH,
                               filters.get("ano"), 
                               filters.get("fluxo"), 
                               filters.get("servico"), 
                               filters.get("formulario"))
         
-        # Aplica enriquecimento de dados usando get_sampled_data_for_charts
-        # Mas sem amostragem para garantir todos os dados (sample_size muito grande)
-        df = get_sampled_data_for_charts("data/meu_arquivo.csv", 
-                                        filters.get("ano"), 
-                                        filters.get("fluxo"), 
-                                        filters.get("servico"), 
-                                        filters.get("formulario"),
-                                        sample_size=999999999,  # Valor muito grande para não amostrar
-                                        enrich_data=True)
-        
         if df.empty:
             empty_fig = _create_empty_figure("Nenhum dado disponível")
-            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div("Nenhum dado disponível"), empty_fig
+            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div("Nenhum dado disponível")
 
         try:
-            qtd_servicos = df['servico'].nunique() if 'servico' in df.columns else 0
-            qtd_fluxos = df['fluxo'].nunique() if 'fluxo' in df.columns else 0
-            media_campos_fluxo = round(df.groupby('fluxo')['nomeCampo'].nunique().mean(), 2) if 'fluxo' in df.columns and 'nomeCampo' in df.columns else 0
+            # OTIMIZAÇÃO: Calcular KPIs usando função centralizada (dados já processados)
+            kpis = calculate_kpis(df)
             
-            # Calcular padronização usando a fórmula do PowerBI
-            # O card deve mostrar a média dos percentuais de padronização por fluxo
-            # calculada como: campos únicos padronizados / campos únicos totais por fluxo
-            if 'nomeCampo' in df.columns:
-                df["is_padronizado"] = df["nomeCampo"].apply(_is_padronizado)
-                
-                # Calcular percentual de padronização por fluxo (baseado em campos únicos)
-                percentuais_fluxos = []
-                
-                for fluxo in df['fluxo'].unique():
-                    df_fluxo = df[df['fluxo'] == fluxo]
-                    total_campos_unicos = df_fluxo['nomeCampo'].nunique()
-                    
-                    if total_campos_unicos > 0:
-                        # Filtrar apenas campos padronizados e contar únicos
-                        campos_padronizados_unicos = df_fluxo[df_fluxo['is_padronizado'] == 1]['nomeCampo'].nunique()
-                        pct_fluxo = (campos_padronizados_unicos / total_campos_unicos) * 100
-                        percentuais_fluxos.append(pct_fluxo)
-                
-                # Calcular média dos percentuais
-                if percentuais_fluxos:
-                    pct_medio = sum(percentuais_fluxos) / len(percentuais_fluxos)
-                    pct_fluxo_padronizado = f"{pct_medio:.1f}%"
-                else:
-                    pct_fluxo_padronizado = "0%"
-            else:
-                pct_fluxo_padronizado = "0%"
-
-            # Usa os mesmos dados enriquecidos para gráficos
-            df_charts = df.copy()
+            # OTIMIZAÇÃO: Preparar dados para gráficos (amostragem se necessário)
+            df_charts = prepare_chart_data(df, max_rows=50000)
             
-            # Adicionar coluna is_padronizado ao df_charts também
-            if 'nomeCampo' in df_charts.columns:
-                df_charts["is_padronizado"] = df_charts["nomeCampo"].apply(_is_padronizado)
-            
+            # Criar gráficos usando dados já processados
             fig_percentual_padronizacao = _create_fluxo_padronizacao_chart(df_charts)
             fig_contagem_servico_fluxo = _create_ranking_chart(df_charts)
             tabela_padronizacao = _create_padronizacao_tabela(df_charts)
-            fig_hierarquia = _create_fluxos_hierarquia_tree(df_charts)  # Adicionar esta linha
             
-            return str(qtd_servicos), str(qtd_fluxos), str(media_campos_fluxo), pct_fluxo_padronizado, fig_percentual_padronizacao, fig_contagem_servico_fluxo, tabela_padronizacao, fig_hierarquia
+            return str(kpis['qtd_servicos']), str(kpis['qtd_fluxos']), str(kpis['media_campos_fluxo']), kpis['pct_fluxo_padronizado'], fig_percentual_padronizacao, fig_contagem_servico_fluxo, tabela_padronizacao
             
         except Exception as e:
             print(f"Erro ao atualizar gráficos de fluxos: {e}")
             import traceback
             traceback.print_exc()
             empty_fig = _create_empty_figure("Erro ao carregar dados")
-            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div(f"Erro: {str(e)}"), empty_fig
+            return "0", "0", "0", "0%", empty_fig, empty_fig, html.Div(f"Erro: {str(e)}")
 
 def _create_fluxo_padronizacao_chart(df):
     """Gráfico de barras horizontais - Percentual de Padronização por Fluxo"""
@@ -328,10 +94,7 @@ def _create_fluxo_padronizacao_chart(df):
         return _create_empty_figure("Dados não disponíveis")
     
     try:
-        # Verificar se is_padronizado existe, caso contrário calcular
-        if 'is_padronizado' not in df.columns and 'nomeCampo' in df.columns:
-            df["is_padronizado"] = df["nomeCampo"].apply(_is_padronizado)
-        
+        # OTIMIZAÇÃO: is_padronizado já existe no DataFrame processado
         if 'is_padronizado' not in df.columns:
             return _create_empty_figure("Dados não disponíveis")
         
@@ -344,45 +107,88 @@ def _create_fluxo_padronizacao_chart(df):
         padronizacao['percent_padronizado'] = (padronizacao['campos_padronizados'] / padronizacao['total_campos'] * 100).round(1)
         padronizacao = padronizacao.sort_values('percent_padronizado', ascending=True).tail(20)
         
+        # Truncar nomes longos para melhor visualização (máximo 50 caracteres)
+        MAX_LABEL_LENGTH = 50
+        fluxos_labels = []
+        fluxos_full_names = padronizacao['fluxo'].tolist()
+        
+        for name in fluxos_full_names:
+            if len(name) > MAX_LABEL_LENGTH:
+                fluxos_labels.append(name[:MAX_LABEL_LENGTH] + "...")
+            else:
+                fluxos_labels.append(name)
+        
+        # Criar gradiente de cores baseado no percentual (vermelho para baixo, verde para alto)
+        colors = []
+        for pct in padronizacao['percent_padronizado']:
+            if pct < 30:
+                colors.append('#e74c3c')  # Vermelho
+            elif pct < 50:
+                colors.append('#f39c12')  # Laranja
+            elif pct < 70:
+                colors.append('#3498db')  # Azul
+            elif pct < 90:
+                colors.append('#2ecc71')  # Verde claro
+            else:
+                colors.append('#27ae60')  # Verde escuro
+        
         # Criar gráfico de barras horizontais
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
-            y=padronizacao['fluxo'],
             x=padronizacao['percent_padronizado'],
+            y=fluxos_labels,
             orientation='h',
             marker=dict(
-                color=padronizacao['percent_padronizado'],
-                colorscale=['#fee5d9', '#fcae91', '#fb6a4a', '#de2d26', '#a50f15'],
-                showscale=False,
-                line=dict(color='#ffffff', width=1)
+                color=colors,
+                line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
+                opacity=0.95
             ),
             text=[f"{val:.1f}%" for val in padronizacao['percent_padronizado']],
             textposition='outside',
-            textfont=dict(color='#495057', size=12)
+            textfont=dict(color='#2c3e50', size=12, family='Arial, sans-serif'),
+            hovertemplate='<b style="font-size: 14px;">%{customdata}</b><br>' +
+                         '<span style="color: #e74c3c;">% Padronização:</span> <b>%{x:.1f}%</b><extra></extra>',
+            customdata=fluxos_full_names,
+            cliponaxis=False
         ))
+        
+        # Inverter ordem para mostrar maior no topo
+        category_array = fluxos_labels[::-1]
         
         fig.update_layout(
             template='plotly_white',
             height=450,
-            plot_bgcolor='white',
+            plot_bgcolor='#ffffff',
             paper_bgcolor='white',
             xaxis=dict(
-                title="% Padronização",
+                title=dict(
+                    text="% Padronização",
+                    font=dict(color='#2c3e50', size=13, family='Arial, sans-serif')
+                ),
                 showgrid=True,
-                gridcolor='#e9ecef',
-                tickfont=dict(color='#495057'),
-                titlefont=dict(color='#495057'),
+                gridcolor='rgba(230, 236, 240, 0.8)',
+                gridwidth=1.5,
+                tickfont=dict(color='#6c757d', size=11, family='Arial, sans-serif'),
+                showline=False,
+                zeroline=True,
+                zerolinecolor='rgba(230, 236, 240, 0.8)',
+                zerolinewidth=1.5,
                 range=[0, 105]
             ),
             yaxis=dict(
-                title="Fluxo",
+                title="",
                 showgrid=False,
-                tickfont=dict(color='#495057'),
-                titlefont=dict(color='#495057')
+                tickfont=dict(color='#495057', size=10, family='Arial, sans-serif'),
+                showline=False,
+                categoryorder='array',
+                categoryarray=category_array
             ),
             showlegend=False,
-            margin=dict(l=300, r=50, t=20, b=50)
+            margin=dict(l=180, r=120, t=20, b=60),
+            hovermode='closest',
+            font=dict(family='Arial, sans-serif', color='#495057'),
+            bargap=0.4
         )
         
         return fig
@@ -402,49 +208,108 @@ def _create_ranking_chart(df):
         # Agrupar por fluxo e contar serviços únicos
         ranking = df.groupby('fluxo')['servico'].nunique().reset_index()
         ranking.columns = ['fluxo', 'contagem_servico']
-        ranking = ranking.sort_values('contagem_servico', ascending=True).tail(20)  # ascending=True para barras horizontais (maior no topo)
+        ranking = ranking.sort_values('contagem_servico', ascending=False).head(20)
+        
+        # Truncar nomes longos para melhor visualização (máximo 50 caracteres)
+        MAX_LABEL_LENGTH = 50
+        fluxos_labels = []
+        fluxos_full_names = ranking['fluxo'].tolist()
+        
+        for name in fluxos_full_names:
+            if len(name) > MAX_LABEL_LENGTH:
+                fluxos_labels.append(name[:MAX_LABEL_LENGTH] + "...")
+            else:
+                fluxos_labels.append(name)
+        
+        # Criar gradiente de cores bonito (tons de roxo/azul)
+        n_items = len(ranking)
+        colors = []
+        base_colors = [
+            (155, 89, 182),   # Roxo claro
+            (142, 68, 173),   # Roxo médio
+            (102, 126, 234),  # Azul-roxo
+            (52, 152, 219),   # Azul claro
+            (41, 128, 185)    # Azul escuro
+        ]
+        
+        if n_items == 0:
+            colors = []
+        elif n_items == 1:
+            colors = [f'rgb({base_colors[0][0]}, {base_colors[0][1]}, {base_colors[0][2]})']
+        else:
+            for i in range(n_items):
+                # Interpolação entre as cores base
+                color_idx = int((i / (n_items - 1)) * (len(base_colors) - 1))
+                if color_idx >= len(base_colors) - 1:
+                    r, g, b = base_colors[-1]
+                else:
+                    # Interpolação linear entre duas cores
+                    frac = (i / (n_items - 1)) * (len(base_colors) - 1) - color_idx
+                    r1, g1, b1 = base_colors[color_idx]
+                    r2, g2, b2 = base_colors[color_idx + 1]
+                    r = int(r1 + (r2 - r1) * frac)
+                    g = int(g1 + (g2 - g1) * frac)
+                    b = int(b1 + (b2 - b1) * frac)
+                colors.append(f'rgb({r}, {g}, {b})')
         
         # Criar gráfico de barras horizontais
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
-            y=ranking['fluxo'],
             x=ranking['contagem_servico'],
-            orientation='h',  # Barras horizontais
+            y=fluxos_labels,
+            orientation='h',
             marker=dict(
-                color='#495057',
-                line=dict(color='#ffffff', width=1)
+                color=colors,
+                line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
+                opacity=0.95
             ),
-            text=ranking['contagem_servico'],
+            text=[f"{val:,}".replace(",", ".") for val in ranking['contagem_servico']],
             textposition='outside',
-            textfont=dict(color='#495057', size=12)
+            textfont=dict(color='#2c3e50', size=12, family='Arial, sans-serif'),
+            hovertemplate='<b style="font-size: 14px;">%{customdata}</b><br>' +
+                         '<span style="color: #3498db;">Serviços:</span> <b>%{x:,.0f}</b><extra></extra>',
+            customdata=fluxos_full_names,
+            cliponaxis=False
         ))
         
+        # Inverter ordem para mostrar maior no topo
+        category_array = fluxos_labels[::-1]
+        
         # Altura da tabela: header(50) + 15 linhas(48px cada) + footer(50) = 820px
-        # Ajustar margens para que a altura visual seja igual à tabela
         fig.update_layout(
             template='plotly_white',
-            height=820,  # Altura correspondente à tabela de padronização (50 + 15*48 + 50 = 820px)
-            plot_bgcolor='white',
+            height=820,
+            plot_bgcolor='#ffffff',
             paper_bgcolor='white',
             xaxis=dict(
-                title="Contagem de serviço",
+                title=dict(
+                    text="Quantidade de Serviços",
+                    font=dict(color='#2c3e50', size=13, family='Arial, sans-serif')
+                ),
                 showgrid=True,
-                gridcolor='#e9ecef',
-                gridwidth=1,
-                tickfont=dict(color='#495057'),
-                titlefont=dict(color='#495057'),
-                range=[0, ranking['contagem_servico'].max() * 1.15]  # Espaço para labels
+                gridcolor='rgba(230, 236, 240, 0.8)',
+                gridwidth=1.5,
+                tickfont=dict(color='#6c757d', size=11, family='Arial, sans-serif'),
+                showline=False,
+                zeroline=True,
+                zerolinecolor='rgba(230, 236, 240, 0.8)',
+                zerolinewidth=1.5,
+                range=[0, ranking['contagem_servico'].max() * 1.15]
             ),
             yaxis=dict(
-                title="fluxo",
+                title="",
                 showgrid=False,
-                tickfont=dict(color='#495057', size=10),
-                titlefont=dict(color='#495057')
+                tickfont=dict(color='#495057', size=10, family='Arial, sans-serif'),
+                showline=False,
+                categoryorder='array',
+                categoryarray=category_array
             ),
             showlegend=False,
-            margin=dict(l=300, r=80, t=50, b=50),  # Margem esquerda maior para nomes dos fluxos
-            autosize=False
+            margin=dict(l=180, r=120, t=20, b=60),
+            hovermode='closest',
+            font=dict(family='Arial, sans-serif', color='#495057'),
+            bargap=0.4
         )
         
         return fig
@@ -464,8 +329,8 @@ def _create_padronizacao_tabela(df):
         # Criar cópia para não modificar o original
         df_work = df.copy()
         
-        # Marcar quais campos são padronizados usando a fórmula do PowerBI
-        df_work["is_padronizado"] = df_work["nomeCampo"].apply(_is_padronizado)
+        # OTIMIZAÇÃO: is_padronizado já existe no DataFrame processado
+        # Não precisa recalcular
         
         # Agrupar dados para a tabela
         # Campos do Formulário = quantidade de campos únicos por fluxo
@@ -510,41 +375,77 @@ def _create_padronizacao_tabela(df):
         pct_total = (total_padronizados / total_campos * 100).round(1) if total_campos > 0 else 0
         
         # Criar tabela usando dbc.Table com estilo similar à overview
-        # Header com posição sticky
+        # Header com posição sticky e estilo melhorado
+        header_style = {
+            "backgroundColor": "#1e3a5f",
+            "color": "white",
+            "padding": "12px 16px",
+            "position": "sticky",
+            "top": 0,
+            "zIndex": 10,
+            "fontWeight": "bold",
+            "fontSize": "13px",
+            "textAlign": "left",
+            "border": "none",
+            "whiteSpace": "nowrap"
+        }
+        
         header = html.Thead([
             html.Tr([
-                html.Th("Fluxo", style={"backgroundColor": "#495057", "color": "white", "padding": "12px", "position": "sticky", "top": 0, "zIndex": 10}),
-                html.Th("Campos do Formulário", style={"backgroundColor": "#495057", "color": "white", "padding": "12px", "position": "sticky", "top": 0, "zIndex": 10, "textAlign": "center"}),
-                html.Th("Campos Padronizados", style={"backgroundColor": "#495057", "color": "white", "padding": "12px", "position": "sticky", "top": 0, "zIndex": 10, "textAlign": "center"}),
-                html.Th("% Padronização do Fluxo", style={"backgroundColor": "#495057", "color": "white", "padding": "12px", "position": "sticky", "top": 0, "zIndex": 10, "textAlign": "center"})
+                html.Th("Fluxo", style=header_style),
+                html.Th("Campos do Formulário", style={**header_style, "textAlign": "center"}),
+                html.Th("Campos Padronizados", style={**header_style, "textAlign": "center"}),
+                html.Th("% Padronização", style={**header_style, "textAlign": "center"})
             ])
         ], style={"position": "sticky", "top": 0, "zIndex": 10})
         
-        # Body
+        # Body com melhor estilo e tamanho de texto
         body_rows = []
         MAX_LINHAS_VISIVEIS = 15
         
+        cell_style = {
+            "padding": "12px 16px",
+            "border": "1px solid #dee2e6",
+            "fontSize": "13px",
+            "color": "#212529",
+            "whiteSpace": "nowrap",
+            "overflow": "hidden",
+            "textOverflow": "ellipsis"
+        }
+        
         for idx, row in padronizacao_por_fluxo.iterrows():
+            # Truncar nome do fluxo se muito longo
+            fluxo_text = str(row['Fluxo'])
+            if len(fluxo_text) > 60:
+                fluxo_text = fluxo_text[:57] + "..."
+            
             body_rows.append(
                 html.Tr([
-                    html.Td(str(row['Fluxo']), style={"padding": "10px", "border": "1px solid #dee2e6"}),
-                    html.Td(str(int(row['Campos do Formulário'])), style={"padding": "10px", "border": "1px solid #dee2e6", "textAlign": "center"}),
-                    html.Td(str(int(row['Campos Padronizados'])), style={"padding": "10px", "border": "1px solid #dee2e6", "textAlign": "center"}),
-                    html.Td(f"{row['% Padronização do Fluxo']:.1f}%", style={"padding": "10px", "border": "1px solid #dee2e6", "textAlign": "center"})
-                ], style={"backgroundColor": "#ffffff" if idx % 2 == 0 else "#f8f9fa"})
+                    html.Td(fluxo_text, style={**cell_style, "maxWidth": "300px"}),
+                    html.Td(str(int(row['Campos do Formulário'])), style={**cell_style, "textAlign": "center"}),
+                    html.Td(str(int(row['Campos Padronizados'])), style={**cell_style, "textAlign": "center"}),
+                    html.Td(f"{row['% Padronização do Fluxo']:.1f}%", style={**cell_style, "textAlign": "center"})
+                ], style={
+                    "backgroundColor": "#ffffff" if idx % 2 == 0 else "#f8f9fa",
+                    "borderBottom": "1px solid #dee2e6"
+                })
             )
         
         # Footer com total
+        footer_style = {
+            "padding": "14px 16px",
+            "border": "1px solid #dee2e6",
+            "backgroundColor": "#e9ecef",
+            "fontWeight": "bold",
+            "fontSize": "14px"
+        }
+        
         footer = html.Tfoot([
             html.Tr([
-                html.Td("Total", style={"padding": "12px", "border": "1px solid #dee2e6", 
-                      "backgroundColor": "#e9ecef", "fontWeight": "bold"}),
-                html.Td(str(int(total_campos)), style={"padding": "12px", "border": "1px solid #dee2e6", 
-                      "backgroundColor": "#e9ecef", "fontWeight": "bold", "textAlign": "center"}),
-                html.Td(str(int(total_padronizados)), style={"padding": "12px", "border": "1px solid #dee2e6", 
-                      "backgroundColor": "#e9ecef", "fontWeight": "bold", "textAlign": "center"}),
-                html.Td(f"{pct_total:.1f}%", style={"padding": "12px", "border": "1px solid #dee2e6", 
-                      "backgroundColor": "#e9ecef", "fontWeight": "bold", "textAlign": "center"})
+                html.Td("Total", style={**footer_style}),
+                html.Td(str(int(total_campos)), style={**footer_style, "textAlign": "center"}),
+                html.Td(str(int(total_padronizados)), style={**footer_style, "textAlign": "center"}),
+                html.Td(f"{pct_total:.1f}%", style={**footer_style, "textAlign": "center"})
             ])
         ])
         
@@ -552,8 +453,16 @@ def _create_padronizacao_tabela(df):
             header,
             html.Tbody(body_rows),
             footer
-        ], bordered=True, hover=True, responsive=True, striped=False, 
-        style={"marginBottom": 0, "fontSize": "14px", "width": "100%"})
+        ], bordered=False, hover=True, responsive=True, striped=False, 
+        style={
+            "marginBottom": 0,
+            "fontSize": "13px",
+            "width": "100%",
+            "borderCollapse": "separate",
+            "borderSpacing": 0,
+            "borderRadius": "8px",
+            "overflow": "hidden"
+        })
         
         # Calcular altura e envolver em div com scroll
         altura_linha = 48
@@ -568,8 +477,9 @@ def _create_padronizacao_tabela(df):
                 "overflowY": "auto",
                 "overflowX": "auto",
                 "border": "1px solid #dee2e6",
-                "borderRadius": "4px",
-                "display": "block"
+                "borderRadius": "8px",
+                "display": "block",
+                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
             }
         )
         

@@ -1,15 +1,18 @@
 import pandas as pd
 import os
 from typing import Dict, Any, Optional
-from src.utils.text_cleaner import clean_dataframe_text_columns
 
 # Cache global para dados
 _data_cache = {}
 _metadata_cache = {}
+_file_timestamps = {}  # Armazena timestamps dos arquivos para invalidar cache
+_filtered_data_cache = {}  # Cache de dados filtrados para melhor performance
+_max_filtered_cache_size = 50  # Limite de entradas no cache de filtros
 
 def load_data_once(csv_path: str) -> pd.DataFrame:
     """
     Carrega os dados do CSV uma única vez usando chunks e armazena em cache.
+    Invalida o cache automaticamente se o arquivo foi modificado.
     
     Args:
         csv_path: Caminho para o arquivo CSV
@@ -17,9 +20,24 @@ def load_data_once(csv_path: str) -> pd.DataFrame:
     Returns:
         DataFrame com todos os dados
     """
-    global _data_cache
+    global _data_cache, _file_timestamps
     
-    if csv_path not in _data_cache:
+    # Verifica se o arquivo foi modificado
+    file_modified = False
+    if os.path.exists(csv_path):
+        current_timestamp = os.path.getmtime(csv_path)
+        if csv_path in _file_timestamps:
+            if current_timestamp != _file_timestamps[csv_path]:
+                print(f"Arquivo {csv_path} foi modificado. Invalidando cache...")
+                file_modified = True
+                # Remove do cache se foi modificado
+                if csv_path in _data_cache:
+                    del _data_cache[csv_path]
+                if csv_path in _metadata_cache:
+                    del _metadata_cache[csv_path]
+        _file_timestamps[csv_path] = current_timestamp
+    
+    if csv_path not in _data_cache or file_modified:
         print(f"Carregando dados do CSV: {csv_path}")
         try:
             if not os.path.exists(csv_path):
@@ -27,29 +45,49 @@ def load_data_once(csv_path: str) -> pd.DataFrame:
                 _data_cache[csv_path] = pd.DataFrame()
                 return _data_cache[csv_path]
 
+            # Detecta o separador automaticamente
+            with open(csv_path, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
+                sep = ';' if ';' in first_line else ','
+            print(f"Separador detectado: '{sep}'")
+
             # Tenta detectar o encoding correto
             encoding = 'utf-8'
             try:
                 # Primeiro tenta UTF-8
-                test_df = pd.read_csv(csv_path, encoding='utf-8', nrows=10)
+                test_df = pd.read_csv(csv_path, encoding='utf-8', sep=sep, nrows=10)
             except (UnicodeDecodeError, UnicodeError):
                 # Se falhar, usa latin1
                 encoding = 'latin1'
+                test_df = pd.read_csv(csv_path, encoding='latin1', sep=sep, nrows=10)
+            
+            # Verifica quais colunas existem no CSV
+            columns_in_file = test_df.columns.tolist()
+            parse_dates_list = []
+            if 'dataCriacao' in columns_in_file:
+                parse_dates_list = ['dataCriacao']
             
             # Carrega dados em chunks para evitar problemas de memória
             chunk_size = 100000  # 100k registros por chunk
             chunks = []
             
-            print(f"Carregando dados em chunks (encoding: {encoding})...")
-            for i, chunk in enumerate(pd.read_csv(
-                csv_path, 
-                encoding=encoding, 
-                sep=',', 
-                parse_dates=['dataCriacao'],
-                low_memory=False,
-                dtype={'statusFluxo': 'category'},
-                chunksize=chunk_size
-            )):
+            read_csv_params = {
+                'filepath_or_buffer': csv_path,
+                'encoding': encoding,
+                'sep': sep,
+                'low_memory': False,
+                'chunksize': chunk_size
+            }
+            
+            if parse_dates_list:
+                read_csv_params['parse_dates'] = parse_dates_list
+            
+            # Tenta adicionar dtype apenas se a coluna existir
+            if 'statusFluxo' in columns_in_file:
+                read_csv_params['dtype'] = {'statusFluxo': 'category'}
+            
+            print(f"Carregando dados em chunks (encoding: {encoding}, sep: '{sep}')...")
+            for i, chunk in enumerate(pd.read_csv(**read_csv_params)):
                 # Limpa colunas do chunk
                 chunk.columns = [c.strip().lstrip('\ufeff') for c in chunk.columns]
                 chunks.append(chunk)
@@ -60,19 +98,21 @@ def load_data_once(csv_path: str) -> pd.DataFrame:
             # Concatena todos os chunks
             df = pd.concat(chunks, ignore_index=True)
             
-            # Limpar problemas de encoding em colunas de texto
-            print("Corrigindo problemas de encoding em colunas de texto...")
-            df = clean_dataframe_text_columns(df)
+            # REMOVIDO: Limpeza de encoding (tratamento será feito externamente)
+            # df = clean_dataframe_text_columns(df)
             
             # Armazena no cache
             _data_cache[csv_path] = df
-            print(f"Dados carregados: {len(df):,} registros")
+            print(f"Dados carregados: {len(df):,} registros, {len(df.columns)} colunas")
+            print(f"Colunas disponíveis: {', '.join(df.columns.tolist()[:10])}{'...' if len(df.columns) > 10 else ''}")
             
         except FileNotFoundError as e:
             print(f"Erro: Arquivo CSV não encontrado em {csv_path}. {e}")
             _data_cache[csv_path] = pd.DataFrame()
         except Exception as e:
             print(f"Erro ao carregar dados: {e}")
+            import traceback
+            traceback.print_exc()
             _data_cache[csv_path] = pd.DataFrame()
     
     return _data_cache[csv_path]
@@ -87,19 +127,40 @@ def get_metadata(csv_path: str) -> Dict[str, Any]:
     Returns:
         Dicionário com metadados
     """
-    global _metadata_cache
+    global _metadata_cache, _file_timestamps
     
-    if csv_path not in _metadata_cache:
+    # Verifica se o arquivo foi modificado (invalida cache de metadados também)
+    file_modified = False
+    if os.path.exists(csv_path):
+        current_timestamp = os.path.getmtime(csv_path)
+        if csv_path in _file_timestamps:
+            if current_timestamp != _file_timestamps[csv_path]:
+                file_modified = True
+                if csv_path in _metadata_cache:
+                    del _metadata_cache[csv_path]
+    
+    if csv_path not in _metadata_cache or file_modified:
         df = load_data_once(csv_path)
         
         if df.empty:
             return {"anos": [], "fluxos": [], "servicos": [], "formularios": []}
         
         # Extrai metadados
-        anos = sorted(df['dataCriacao'].dt.year.dropna().unique().astype(int).tolist())
-        fluxos = sorted(df['fluxo'].dropna().unique().astype(str).tolist())
-        servicos = sorted(df['servico'].dropna().unique().astype(str).tolist())
-        formularios = sorted(df['formulario'].dropna().unique().astype(str).tolist())
+        anos = []
+        if 'dataCriacao' in df.columns:
+            anos = sorted(df['dataCriacao'].dt.year.dropna().unique().astype(int).tolist())
+        
+        fluxos = []
+        if 'fluxo' in df.columns:
+            fluxos = sorted(df['fluxo'].dropna().unique().astype(str).tolist())
+        
+        servicos = []
+        if 'servico' in df.columns:
+            servicos = sorted(df['servico'].dropna().unique().astype(str).tolist())
+        
+        formularios = []
+        if 'formulario' in df.columns:
+            formularios = sorted(df['formulario'].dropna().unique().astype(str).tolist())
         
         _metadata_cache[csv_path] = {
             "anos": anos,
@@ -112,45 +173,115 @@ def get_metadata(csv_path: str) -> Dict[str, Any]:
     
     return _metadata_cache[csv_path]
 
+def _get_parquet_processed_path(csv_path: str) -> str:
+    """Retorna o caminho do arquivo Parquet processado correspondente ao CSV"""
+    return csv_path.replace('.csv', '_processed.parquet')
+
+def load_processed_data(csv_path: str) -> pd.DataFrame:
+    """
+    Carrega dados processados (enriquecidos) do Parquet.
+    Se não existir, carrega do CSV e processa em tempo de execução.
+    
+    Args:
+        csv_path: Caminho do arquivo CSV original
+        
+    Returns:
+        DataFrame processado e enriquecido
+    """
+    parquet_path = _get_parquet_processed_path(csv_path)
+    
+    # Tentar carregar Parquet processado
+    if os.path.exists(parquet_path):
+        try:
+            # Verificar se CSV foi modificado após Parquet
+            if os.path.exists(csv_path):
+                csv_timestamp = os.path.getmtime(csv_path)
+                parquet_timestamp = os.path.getmtime(parquet_path)
+                
+                if csv_timestamp > parquet_timestamp:
+                    print(f"Aviso: CSV foi modificado após processamento. Execute: python scripts/process_data.py")
+            
+            print(f"Carregando dados processados: {parquet_path}")
+            df = pd.read_parquet(parquet_path)
+            print(f"Dados processados carregados: {len(df):,} registros")
+            return df
+        except Exception as e:
+            print(f"Erro ao carregar dados processados: {e}")
+            print("Carregando dados do CSV e processando em tempo de execução...")
+    
+    # Fallback: carregar CSV e processar em tempo de execução
+    print("Dados processados não encontrados. Processando do CSV...")
+    from src.utils.data_processor import enrich_dataframe
+    df = load_data_once(csv_path)
+    df_enriched = enrich_dataframe(df)
+    print("Dados processados em tempo de execução (considere executar scripts/process_data.py para melhor performance)")
+    return df_enriched
+
+def _get_cache_key(csv_path: str, ano: Optional[str], fluxo: Optional[str], 
+                   servico: Optional[str], formulario: Optional[str]) -> str:
+    """Gera chave única para cache de dados filtrados"""
+    return f"{csv_path}__{ano}__{fluxo}__{servico}__{formulario}"
+
 def get_filtered_data(csv_path: str, ano: Optional[str] = None, fluxo: Optional[str] = None, 
                      servico: Optional[str] = None, formulario: Optional[str] = None) -> pd.DataFrame:
     """
-    Obtém dados filtrados do cache e aplica enriquecimento (variação de campos por formulário).
+    Obtém dados filtrados do cache.
+    Usa dados processados se disponível.
     
     Args:
         csv_path: Caminho para o arquivo CSV
-        ano: Filtro por ano
+        ano: Filtro por ano (ignorado se não houver coluna dataCriacao)
         fluxo: Filtro por fluxo
         servico: Filtro por serviço
         formulario: Filtro por formulário
         
     Returns:
-        DataFrame filtrado e enriquecido
+        DataFrame filtrado
     """
-    df = load_data_once(csv_path)
+    global _filtered_data_cache, _max_filtered_cache_size
+    
+    # Verificar cache de dados filtrados
+    cache_key = _get_cache_key(csv_path, ano, fluxo, servico, formulario)
+    if cache_key in _filtered_data_cache:
+        return _filtered_data_cache[cache_key]
+    
+    # OTIMIZAÇÃO: Carregar dados já processados (com is_padronizado, tipo_componente, etc.)
+    df = load_processed_data(csv_path)
     
     if df.empty:
         return df
     
-    # Aplica filtros
-    filtered_df = df.copy()
+    # OTIMIZAÇÃO: Usar máscaras booleanas para filtros (muito mais eficiente)
+    mask = pd.Series([True] * len(df), index=df.index)
     
-    if ano and 'dataCriacao' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['dataCriacao'].dt.year == int(ano)]
+    # Filtro por ano (só se a coluna existir)
+    if ano and 'dataCriacao' in df.columns:
+        mask = mask & (df['dataCriacao'].dt.year == int(ano))
     
-    if fluxo and 'fluxo' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['fluxo'] == fluxo]
+    # Filtro por fluxo
+    if fluxo and 'fluxo' in df.columns:
+        mask = mask & (df['fluxo'] == fluxo)
     
-    if servico and 'servico' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['servico'] == servico]
+    # Filtro por serviço
+    if servico and 'servico' in df.columns:
+        mask = mask & (df['servico'] == servico)
     
-    if formulario and 'formulario' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['formulario'] == formulario]
+    # Filtro por formulário
+    if formulario and 'formulario' in df.columns:
+        mask = mask & (df['formulario'] == formulario)
     
-    # Aplica enriquecimento de dados: varia quantidade de campos por formulário (15-25)
-    # Isso garante que todos os dados usados na aplicação (cards, gráficos, tabelas) 
-    # já tenham a variação aplicada
-    filtered_df = _vary_formulario_campos(filtered_df, min_campos=15, max_campos=25)
+    # Aplicar filtros
+    if mask.all():
+        filtered_df = df  # Sem filtros, retorna referência
+    else:
+        filtered_df = df[mask].copy()
+    
+    # Armazenar no cache (limitado)
+    if len(_filtered_data_cache) >= _max_filtered_cache_size:
+        oldest_key = list(_filtered_data_cache.keys())[0]
+        del _filtered_data_cache[oldest_key]
+    
+    _filtered_data_cache[cache_key] = filtered_df
     
     return filtered_df
 
@@ -556,15 +687,22 @@ def get_sampled_data_for_charts(csv_path: str, ano: Optional[str] = None, fluxo:
 
 def clear_cache():
     """Limpa o cache de dados."""
-    global _data_cache, _metadata_cache
+    global _data_cache, _metadata_cache, _file_timestamps, _filtered_data_cache
     _data_cache.clear()
     _metadata_cache.clear()
-    print("Cache limpo")
+    _file_timestamps.clear()
+    _filtered_data_cache.clear()
+    print("Cache limpo (incluindo cache de dados filtrados)")
 
 def get_cache_info() -> Dict[str, Any]:
     """Retorna informações sobre o cache."""
+    total_memory = sum(df.memory_usage(deep=True).sum() for df in _data_cache.values()) / 1024 / 1024  # MB
+    filtered_memory = sum(df.memory_usage(deep=True).sum() for df in _filtered_data_cache.values()) / 1024 / 1024  # MB
     return {
         "data_files_cached": len(_data_cache),
         "metadata_files_cached": len(_metadata_cache),
-        "total_memory_usage": sum(df.memory_usage(deep=True).sum() for df in _data_cache.values()) / 1024 / 1024  # MB
+        "filtered_data_cached": len(_filtered_data_cache),
+        "total_memory_usage": total_memory,
+        "filtered_memory_usage": filtered_memory,
+        "total_memory_mb": round(total_memory + filtered_memory, 2)
     }

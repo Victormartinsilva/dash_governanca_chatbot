@@ -4,6 +4,56 @@ from dash import html, dcc
 # Importa componentes do Dash Bootstrap para facilitar o layout com cards, linhas e colunas
 import dash_bootstrap_components as dbc
 
+def create_title_with_tooltip(title_text, tooltip_id, tooltip_content):
+    """
+    Cria um título com ícone de informação e tooltip.
+    
+    Args:
+        title_text: Texto do título
+        tooltip_id: ID único para o tooltip
+        tooltip_content: Conteúdo do tooltip (pode ser HTML)
+    
+    Returns:
+        Componente HTML com título e tooltip
+    """
+    return html.Div([
+        html.H5(
+            [
+                title_text,
+                html.Span(
+                    html.I(
+                        className="fas fa-info-circle",
+                        style={
+                            "marginLeft": "8px",
+                            "color": "#6c757d",
+                            "cursor": "pointer",
+                            "fontSize": "14px"
+                        },
+                        id=tooltip_id
+                    )
+                )
+            ],
+            className="mb-1",
+            style={"fontWeight": "600", "color": "#495057", "display": "flex", "alignItems": "center"}
+        ),
+        dbc.Tooltip(
+            tooltip_content,
+            target=tooltip_id,
+            placement="right",
+            style={
+                "maxWidth": "400px", 
+                "fontSize": "13px",
+                "backgroundColor": "#343a40",
+                "color": "#ffffff",
+                "border": "1px solid #495057",
+                "borderRadius": "8px",
+                "padding": "14px",
+                "boxShadow": "0 4px 12px rgba(0,0,0,0.3)",
+                "zIndex": 1000
+            }
+        )
+    ])
+
 # Função que retorna o layout da página "Formulários" (Análise de Formulários)
 def formularios_layout():
     # Armazena dados filtrados para compartilhamento entre callbacks do Dash
@@ -83,23 +133,31 @@ def formularios_layout():
             dbc.Col([
                 dbc.Card(
                     dbc.CardBody([
-                        html.H5(
+                        create_title_with_tooltip(
                             "Formulários Mais Utilizados em Fluxos de Trabalho",
-                            className="mb-2",
-                            style={
-                                "fontWeight": "600",
-                                "color": "#1a1a1a",
-                                "fontSize": "18px"
-                            }
-                        ),
-                        html.P(
-                            "Formulários por Fluxo",
-                            className="mb-3",
-                            style={
-                                "color": "#6c757d",
-                                "fontSize": "14px",
-                                "marginBottom": "1rem"
-                            }
+                            "tooltip-formularios-mais-usados",
+                            html.Div([
+                                html.Strong("Nome: ", style={"color": "#ffffff"}),
+                                html.Span("Formulários Mais Utilizados em Fluxos de Trabalho", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                                html.Span("Quantidade de fluxos distintos em que cada formulário é utilizado, ordenados do maior para o menor.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                                html.Span("Agrupamento por formulário e contagem de fluxos únicos onde é utilizado.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                                html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                                html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                            ])
                         ),
                         dcc.Graph(
                             id='formularios-mais-usados',
@@ -107,7 +165,7 @@ def formularios_layout():
                             config={"displayModeBar": False}
                         )
                     ]),
-                    className="mb-4 shadow-sm",
+                    className="mb-4 shadow-lg",
                     style={
                         "border": "1px solid #dee2e6",
                         "backgroundColor": "#ffffff",
@@ -121,23 +179,31 @@ def formularios_layout():
             dbc.Col([
                 dbc.Card(
                     dbc.CardBody([
-                        html.H5(
+                        create_title_with_tooltip(
                             "Formulários que Utilizados Mais Campos",
-                            className="mb-2",
-                            style={
-                                "fontWeight": "600",
-                                "color": "#1a1a1a",
-                                "fontSize": "18px"
-                            }
-                        ),
-                        html.P(
-                            "Qnt Campos",
-                            className="mb-3",
-                            style={
-                                "color": "#6c757d",
-                                "fontSize": "14px",
-                                "marginBottom": "1rem"
-                            }
+                            "tooltip-complexidade-formularios",
+                            html.Div([
+                                html.Strong("Nome: ", style={"color": "#ffffff"}),
+                                html.Span("Formulários que Utilizados Mais Campos", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                                html.Span("Quantidade de campos distintos por formulário, ordenados do maior para o menor.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                                html.Span("Agrupamento por formulário e contagem de campos únicos.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                                html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                                html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                            ])
                         ),
                         dcc.Graph(
                             id='complexidade-formularios-form',
@@ -145,7 +211,7 @@ def formularios_layout():
                             config={"displayModeBar": False}
                         )
                     ]),
-                    className="mb-4 shadow-sm",
+                    className="mb-4 shadow-lg",
                     style={
                         "border": "1px solid #dee2e6",
                         "backgroundColor": "#ffffff",
@@ -159,26 +225,69 @@ def formularios_layout():
         # Terceira seção: Tabela - Ranking Formulários por uso Fluxos x Qnt. Campos
         dbc.Card(
             dbc.CardBody([
-                html.H5("Ranking Formulários por uso Fluxos x Qnt. Campos", className="mb-3", 
-                       style={"fontWeight": "600", "color": "#212529"}),
+                create_title_with_tooltip(
+                    "Ranking Formulários por uso Fluxos x Qnt. Campos",
+                    "tooltip-ranking-formularios",
+                    html.Div([
+                        html.Strong("Nome: ", style={"color": "#ffffff"}),
+                        html.Span("Ranking Formulários por uso Fluxos x Qnt. Campos", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                        html.Span("Ranking de formulários ordenado por contribuição relativa (fluxos usados × quantidade de campos).", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                        html.Span("Produto entre fluxos únicos e campos únicos por formulário, normalizado em percentual de contribuição.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                        html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                        html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                    ])
+                ),
                 html.Div(
                     id='formularios-utilizados-table',
                     style={"width": "100%", "overflow": "auto"}
                 )
             ]),
-            className="mb-4 shadow-sm",
-            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff"}
+            className="mb-4 shadow-lg",
+            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff", "borderRadius": "12px"}
         ),
 
         # Quarta seção: Análise de Risco vs. Complexidade dos Fluxos
         dbc.Card(
             dbc.CardBody([
-                html.H5("Análise de Risco vs. Complexidade dos Fluxos", className="mb-3", 
-                       style={"fontWeight": "600", "color": "#212529"}),
-                html.P(
-                    "Análise de risco e complexidade dos fluxos baseada em campos e padronização",
-                    className="mb-3",
-                    style={"color": "#6c757d", "fontSize": "14px"}
+                create_title_with_tooltip(
+                    "Análise de Risco vs. Complexidade dos Fluxos",
+                    "tooltip-analise-risco",
+                    html.Div([
+                        html.Strong("Nome: ", style={"color": "#ffffff"}),
+                        html.Span("Análise de Risco vs. Complexidade dos Fluxos", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                        html.Span("Análise visual da relação entre complexidade (campos) e risco (baseado em padronização) dos fluxos.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                        html.Span("Categorização de risco baseada em percentual de padronização e média de campos por formulário. Tamanho dos pontos representa número de formulários.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                        html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                        html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                    ])
                 ),
                 dcc.Graph(
                     id='analise-fluxo-complexidade',
@@ -186,8 +295,8 @@ def formularios_layout():
                     config={"displayModeBar": False}
                 )
             ]),
-            className="mb-4 shadow-sm",
-            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff"}
+            className="mb-4 shadow-lg",
+            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff", "borderRadius": "12px"}
         ),
     ], style={"padding": "20px", "backgroundColor": "#ffffff"})
     

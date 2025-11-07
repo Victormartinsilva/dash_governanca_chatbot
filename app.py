@@ -3,13 +3,14 @@
 from dash import Dash
 import dash_bootstrap_components as dbc
 from flask import Flask, render_template, request, jsonify
+import os
 from src.chatbot import gerar_resposta  # pyright: ignore[reportMissingImports]
 from config import DESIGN_CONFIG  # pyright: ignore[reportMissingImports]
 from src.layouts.main_layout import create_layout
 from src.utils.data_loader import load_metadata
 from src.callbacks import register_all
 from src.chatbot_interface import register_chatbot_callbacks
-from src.utils.data_cache import load_data_once, clear_cache
+from src.utils.data_cache import clear_cache
 
 # -----------------------------------------------------------------------------
 # 🔧 Configuração base do servidor Flask e do app Dash
@@ -39,12 +40,46 @@ def chatbot_index():
 
 @server.route("/chatbot_responder", methods=["POST"])
 def chatbot_responder():
+    """
+    Rota Flask para receber mensagens do chatbot e retornar respostas.
+    
+    Esta rota:
+    - Recebe mensagem e session_id do frontend
+    - Chama função gerar_resposta com contexto
+    - Retorna resposta em formato JSON
+    
+    Request JSON:
+        {
+            "mensagem": "texto da pergunta",
+            "session_id": "id_da_sessao" (opcional)
+        }
+    
+    Response JSON:
+        {
+            "resposta": "texto da resposta"
+        }
+    """
     try:
+        # Obtém dados do request JSON
         dados = request.get_json()
         mensagem = dados.get("mensagem", "")
-        resposta = gerar_resposta(mensagem)
+        session_id = dados.get("session_id", "default")
+        
+        # Valida se há mensagem
+        if not mensagem:
+            return jsonify({"resposta": "Por favor, envie uma mensagem válida."}), 400
+        
+        # Gera resposta usando o chatbot
+        from src.chatbot import gerar_resposta
+        resposta = gerar_resposta(mensagem, session_id)
+        
+        # Retorna resposta em formato JSON
         return jsonify({"resposta": resposta})
+        
     except Exception as e:
+        # Log do erro e retorno de erro genérico
+        import logging
+        logging.error(f"Erro no chatbot_responder: {e}")
         return jsonify({"resposta": f"Erro interno: {str(e)}"}), 500
 
 @server.route("/clear_cache", methods=["POST"])
@@ -73,11 +108,10 @@ def clear_cache_endpoint():
 # -----------------------------------------------------------------------------
 # 🧩 Carregamento de dados e layout
 # -----------------------------------------------------------------------------
-# Limpa o cache para garantir dados atualizados com enriquecimento
+# Limpa o cache para garantir dados atualizados
 clear_cache()
 
-# Carrega o DataFrame e metadados ao iniciar
-df_full = load_data_once("data/meu_arquivo.csv")
+# Carrega metadados ao iniciar (usando caminho relativo - será convertido internamente)
 meta = load_metadata("data/meu_arquivo.csv")
 
 # Define o layout principal
@@ -93,7 +127,6 @@ register_chatbot_callbacks(app)
 # 🚀 Inicialização
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8050))
     debug = os.environ.get("DEBUG", "False").lower() == "true"
     app.run(debug=debug, host="0.0.0.0", port=port)

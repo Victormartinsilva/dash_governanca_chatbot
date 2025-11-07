@@ -60,39 +60,59 @@ def create_layout(meta):
         className="mb-4"
     )
 
-    tabs = dbc.Tabs(
-        [
-            dbc.Tab(
-                label="📊 Visão Geral",
-                tab_id="visao-geral",
-                className="custom-tab",
-                active_tab_class_name="custom-tab--selected"
-            ),
-            dbc.Tab(
-                label="🔄 Fluxos/Serviços",
-                tab_id="fluxos-servicos",
-                className="custom-tab",
-                active_tab_class_name="custom-tab--selected"
-            ),
-            dbc.Tab(
-                label="📄 Formulários",
-                tab_id="formularios",
-                className="custom-tab",
-                active_tab_class_name="custom-tab--selected"
-            ),
-            dbc.Tab(
-                label="📋 Campos",
-                tab_id="campos",
-                className="custom-tab",
-                active_tab_class_name="custom-tab--selected"
-            ),
-        ],
-        id="main-tabs",
-        active_tab="visao-geral",
-        className="mb-4 custom-tabs-container"
+    tabs = html.Div(
+        dbc.Tabs(
+            [
+                dbc.Tab(
+                    label="📊 Visão Geral",
+                    tab_id="visao-geral",
+                    className="custom-tab",
+                    active_tab_class_name="custom-tab--selected"
+                ),
+                dbc.Tab(
+                    label="🔄 Fluxos/Serviços",
+                    tab_id="fluxos-servicos",
+                    className="custom-tab",
+                    active_tab_class_name="custom-tab--selected"
+                ),
+                dbc.Tab(
+                    label="📄 Formulários",
+                    tab_id="formularios",
+                    className="custom-tab",
+                    active_tab_class_name="custom-tab--selected"
+                ),
+                dbc.Tab(
+                    label="📋 Campos",
+                    tab_id="campos",
+                    className="custom-tab",
+                    active_tab_class_name="custom-tab--selected"
+                ),
+                dbc.Tab(
+                    label="📚 Biblioteca",
+                    tab_id="biblioteca",
+                    className="custom-tab",
+                    active_tab_class_name="custom-tab--selected"
+                ),
+            ],
+            id="main-tabs",
+            active_tab="visao-geral",
+            className="mb-4 custom-tabs-container"
+        ),
+        style={
+            "display": "flex",
+            "justifyContent": "center",
+            "width": "100%"
+        }
     )
 
-    content = html.Div(id="page-content", style={"padding": "10px"})
+    content = dcc.Loading(
+        id="page-loading",
+        type="circle",
+        children=html.Div(id="page-content", style={"padding": "10px"}),
+        style={"minHeight": "400px"},
+        color="#2E86AB",
+        fullscreen=False
+    )
 
     return dbc.Container(
         [

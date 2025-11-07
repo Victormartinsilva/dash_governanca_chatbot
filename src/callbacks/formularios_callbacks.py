@@ -2,38 +2,16 @@ from dash import Input, Output
 import plotly.express as px
 import pandas as pd
 import json
-from src.utils.data_cache import get_filtered_data, get_sampled_data_for_charts
+import os
+from src.utils.data_loader import stream_filtered_df
+from src.utils.data_processor import calculate_kpis, prepare_chart_data
 from src.pages.formularios import formularios_layout
 import dash_bootstrap_components as dbc
 from dash import html
 import plotly.graph_objects as go
 
-def _is_padronizado(nome_campo: str) -> int:
-    """
-    Determina se um campo é padronizado baseado na fórmula PowerBI.
-    Padronizado = 1 se:
-    - LEFT([nomeCampo], 3) IN {"TXT", "CBO", "RAD", "CHK"} OU
-    - LEFT([nomeCampo], 5) IN {"CPF_", "CNP_", "CEP_", "TEL_", "EMA_"}
-    Padronizado = 0 caso contrário
-    """
-    if pd.isna(nome_campo) or str(nome_campo) == 'nan':
-        return 0
-    
-    nome_campo_str = str(nome_campo)
-    
-    # Verificar prefixos de 3 letras (sem underscore)
-    if len(nome_campo_str) >= 3:
-        prefixo_3 = nome_campo_str[:3]
-        if prefixo_3 in ["TXT", "CBO", "RAD", "CHK"]:
-            return 1
-    
-    # Verificar prefixos de 5 letras (com underscore)
-    if len(nome_campo_str) >= 5:
-        prefixo_5 = nome_campo_str[:5]
-        if prefixo_5 in ["CPF_", "CNP_", "CEP_", "TEL_", "EMA_"]:
-            return 1
-    
-    return 0
+# Caminho do arquivo CSV
+CSV_PATH = "data/meu_arquivo.csv"
 
 def _create_empty_figure(message):
     """Cria uma figura vazia com mensagem"""
@@ -54,6 +32,9 @@ def _create_empty_figure(message):
         yaxis=dict(showgrid=True, gridcolor='#e9ecef')
     )
     return fig
+
+# REMOVIDO: Função _is_padronizado
+# Agora usamos src.utils.data_processor que centraliza todo o processamento
 
 def register_callbacks(app):
 
@@ -77,7 +58,7 @@ def register_callbacks(app):
 
         # Busca dados diretamente do cache usando os filtros
         filters = filtered_data_json
-        df = get_filtered_data("data/meu_arquivo.csv", 
+        df = stream_filtered_df(CSV_PATH,
                               filters.get("ano"), 
                               filters.get("fluxo"), 
                               filters.get("servico"), 
@@ -88,34 +69,19 @@ def register_callbacks(app):
             return "0", "0", "0", "0", empty_fig, empty_fig, None, empty_fig
 
         try:
-            qtd_formularios = df["formulario"].nunique() if "formulario" in df.columns else 0
-            qtd_campos = df["nomeCampo"].nunique() if "nomeCampo" in df.columns else 0
-            media_campos_formulario = round(df.groupby("formulario")["nomeCampo"].nunique().mean(), 2) if "formulario" in df.columns and "nomeCampo" in df.columns else 0
-
-            # Calcular quantidade total de campos padronizados (únicos)
-            if "nomeCampo" in df.columns:
-                df["is_padronizado"] = df["nomeCampo"].apply(_is_padronizado)
-                
-                # Contar campos padronizados únicos em todo o dataframe
-                campos_padronizados_unicos = df[df["is_padronizado"] == 1]["nomeCampo"].nunique()
-                qtd_campos_padrao = str(campos_padronizados_unicos)
-            else:
-                qtd_campos_padrao = "0"
-
-            # Usa dados completos para estatísticas dos cards
-            # Usa dados amostrados para gráficos para melhor performance
-            df_charts = get_sampled_data_for_charts("data/meu_arquivo.csv", 
-                                                   filters.get("ano"), 
-                                                   filters.get("fluxo"), 
-                                                   filters.get("servico"), 
-                                                   filters.get("formulario"))
+            # OTIMIZAÇÃO: Calcular KPIs usando função centralizada (dados já processados)
+            kpis = calculate_kpis(df)
             
+            # OTIMIZAÇÃO: Preparar dados para gráficos (amostragem se necessário)
+            df_charts = prepare_chart_data(df, max_rows=50000)
+            
+            # Criar gráficos usando dados já processados
             fig_formularios_mais_usados = _create_formularios_mais_usados_chart(df_charts)
             fig_complexidade_formularios = _create_complexidade_formularios_chart(df_charts)
             tabela_formularios_utilizados = _create_formularios_utilizados_table(df_charts)
             fig_analise_fluxo_complexidade = _create_analise_fluxo_complexidade_chart(df_charts)
             
-            return str(qtd_formularios), str(qtd_campos), str(media_campos_formulario), qtd_campos_padrao, fig_formularios_mais_usados, fig_complexidade_formularios, tabela_formularios_utilizados, fig_analise_fluxo_complexidade
+            return str(kpis['qtd_formularios']), str(kpis['qtd_campos_distintos']), str(kpis['media_campos_formulario']), str(kpis['qtd_campos_padronizados']), fig_formularios_mais_usados, fig_complexidade_formularios, tabela_formularios_utilizados, fig_analise_fluxo_complexidade
             
         except Exception as e:
             print(f"Erro ao atualizar gráficos de formulários: {e}")
@@ -134,47 +100,105 @@ def _create_formularios_mais_usados_chart(df):
         # Contar quantos fluxos únicos cada formulário é usado
         formularios_fluxos = df.groupby("formulario")["fluxo"].nunique().reset_index()
         formularios_fluxos.columns = ["formulario", "qtd_fluxos"]
-        formularios_fluxos = formularios_fluxos.sort_values("qtd_fluxos", ascending=True).tail(20)
+        formularios_fluxos = formularios_fluxos.sort_values("qtd_fluxos", ascending=False).head(20)
+        
+        # Truncar nomes longos para melhor visualização (máximo 50 caracteres)
+        MAX_LABEL_LENGTH = 50
+        formularios_labels = []
+        formularios_full_names = formularios_fluxos['formulario'].tolist()
+        
+        for name in formularios_full_names:
+            if len(name) > MAX_LABEL_LENGTH:
+                formularios_labels.append(name[:MAX_LABEL_LENGTH] + "...")
+            else:
+                formularios_labels.append(name)
+        
+        # Criar gradiente de cores bonito (tons de verde-azul)
+        n_items = len(formularios_fluxos)
+        colors = []
+        base_colors = [
+            (199, 233, 180),  # Verde claro
+            (127, 205, 187),  # Verde-azulado
+            (65, 182, 196),   # Azul claro
+            (29, 145, 192),   # Azul médio
+            (34, 94, 168)     # Azul escuro
+        ]
+        
+        if n_items == 0:
+            colors = []
+        elif n_items == 1:
+            colors = [f'rgb({base_colors[0][0]}, {base_colors[0][1]}, {base_colors[0][2]})']
+        else:
+            for i in range(n_items):
+                color_idx = int((i / (n_items - 1)) * (len(base_colors) - 1))
+                if color_idx >= len(base_colors) - 1:
+                    r, g, b = base_colors[-1]
+                else:
+                    frac = (i / (n_items - 1)) * (len(base_colors) - 1) - color_idx
+                    r1, g1, b1 = base_colors[color_idx]
+                    r2, g2, b2 = base_colors[color_idx + 1]
+                    r = int(r1 + (r2 - r1) * frac)
+                    g = int(g1 + (g2 - g1) * frac)
+                    b = int(b1 + (b2 - b1) * frac)
+                colors.append(f'rgb({r}, {g}, {b})')
         
         # Criar gráfico de barras horizontais
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
-            y=formularios_fluxos['formulario'],
             x=formularios_fluxos['qtd_fluxos'],
+            y=formularios_labels,
             orientation='h',
             marker=dict(
-                color='#495057',
-                line=dict(color='#ffffff', width=1)
+                color=colors,
+                line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
+                opacity=0.95
             ),
-            text=formularios_fluxos['qtd_fluxos'],
+            text=[f"{val:,}".replace(",", ".") for val in formularios_fluxos['qtd_fluxos']],
             textposition='outside',
-            textfont=dict(color='#495057', size=12)
+            textfont=dict(color='#2c3e50', size=12, family='Arial, sans-serif'),
+            hovertemplate='<b style="font-size: 14px;">%{customdata}</b><br>' +
+                         '<span style="color: #41b6c4;">Fluxos:</span> <b>%{x:,.0f}</b><extra></extra>',
+            customdata=formularios_full_names,
+            cliponaxis=False
         ))
+        
+        # Inverter ordem para mostrar maior no topo
+        category_array = formularios_labels[::-1]
         
         fig.update_layout(
             template='plotly_white',
             height=450,
-            plot_bgcolor='white',
+            plot_bgcolor='#ffffff',
             paper_bgcolor='white',
             xaxis=dict(
-                title="Formulários por Fluxo",
+                title=dict(
+                    text="Quantidade de Fluxos",
+                    font=dict(color='#2c3e50', size=13, family='Arial, sans-serif')
+                ),
                 showgrid=True,
-                gridcolor='#e9ecef',
-                gridwidth=1,
-                tickfont=dict(color='#495057'),
-                titlefont=dict(color='#495057'),
+                gridcolor='rgba(230, 236, 240, 0.8)',
+                gridwidth=1.5,
+                tickfont=dict(color='#6c757d', size=11, family='Arial, sans-serif'),
+                showline=False,
+                zeroline=True,
+                zerolinecolor='rgba(230, 236, 240, 0.8)',
+                zerolinewidth=1.5,
                 range=[0, formularios_fluxos['qtd_fluxos'].max() * 1.15]
             ),
             yaxis=dict(
-                title="Formulário",
+                title="",
                 showgrid=False,
-                tickfont=dict(color='#495057', size=10),
-                titlefont=dict(color='#495057')
+                tickfont=dict(color='#495057', size=10, family='Arial, sans-serif'),
+                showline=False,
+                categoryorder='array',
+                categoryarray=category_array
             ),
             showlegend=False,
-            margin=dict(l=300, r=80, t=20, b=50),
-            autosize=False
+            margin=dict(l=180, r=120, t=20, b=60),
+            hovermode='closest',
+            font=dict(family='Arial, sans-serif', color='#495057'),
+            bargap=0.4
         )
         
         return fig
@@ -190,47 +214,86 @@ def _create_complexidade_formularios_chart(df):
     try:
         # Contar campos únicos por formulário
         comp = df.groupby("formulario")["nomeCampo"].nunique().reset_index(name="qtd_campos")
-        comp = comp.sort_values("qtd_campos", ascending=True).tail(20)
+        comp = comp.sort_values("qtd_campos", ascending=False).head(20)
+        
+        # Truncar nomes longos para melhor visualização (máximo 50 caracteres)
+        MAX_LABEL_LENGTH = 50
+        formularios_labels = []
+        formularios_full_names = comp['formulario'].tolist()
+        
+        for name in formularios_full_names:
+            if len(name) > MAX_LABEL_LENGTH:
+                formularios_labels.append(name[:MAX_LABEL_LENGTH] + "...")
+            else:
+                formularios_labels.append(name)
+        
+        # Criar gradiente de cores bonito (tons de azul corporativo)
+        n_items = len(comp)
+        colors = []
+        base_color = (46, 134, 171)  # RGB do #2E86AB
+        
+        for i in range(n_items):
+            intensity = 0.6 + (0.4 * (n_items - i) / n_items)
+            r, g, b = [int(c * intensity) for c in base_color]
+            colors.append(f'rgb({r}, {g}, {b})')
         
         # Criar gráfico de barras horizontais
         fig = go.Figure()
         
         fig.add_trace(go.Bar(
-            y=comp['formulario'],
             x=comp['qtd_campos'],
+            y=formularios_labels,
             orientation='h',
             marker=dict(
-                color='#495057',
-                line=dict(color='#ffffff', width=1)
+                color=colors,
+                line=dict(color='rgba(255, 255, 255, 0.9)', width=2),
+                opacity=0.95
             ),
-            text=comp['qtd_campos'],
+            text=[f"{val:,}".replace(",", ".") for val in comp['qtd_campos']],
             textposition='outside',
-            textfont=dict(color='#495057', size=12)
+            textfont=dict(color='#2c3e50', size=12, family='Arial, sans-serif'),
+            hovertemplate='<b style="font-size: 14px;">%{customdata}</b><br>' +
+                         '<span style="color: #2E86AB;">Campos:</span> <b>%{x:,.0f}</b><extra></extra>',
+            customdata=formularios_full_names,
+            cliponaxis=False
         ))
+        
+        # Inverter ordem para mostrar maior no topo
+        category_array = formularios_labels[::-1]
         
         fig.update_layout(
             template='plotly_white',
             height=450,
-            plot_bgcolor='white',
+            plot_bgcolor='#ffffff',
             paper_bgcolor='white',
             xaxis=dict(
-                title="Qnt Campos",
+                title=dict(
+                    text="Quantidade de Campos",
+                    font=dict(color='#2c3e50', size=13, family='Arial, sans-serif')
+                ),
                 showgrid=True,
-                gridcolor='#e9ecef',
-                gridwidth=1,
-                tickfont=dict(color='#495057'),
-                titlefont=dict(color='#495057'),
+                gridcolor='rgba(230, 236, 240, 0.8)',
+                gridwidth=1.5,
+                tickfont=dict(color='#6c757d', size=11, family='Arial, sans-serif'),
+                showline=False,
+                zeroline=True,
+                zerolinecolor='rgba(230, 236, 240, 0.8)',
+                zerolinewidth=1.5,
                 range=[0, comp['qtd_campos'].max() * 1.15]
             ),
             yaxis=dict(
-                title="Formulário",
+                title="",
                 showgrid=False,
-                tickfont=dict(color='#495057', size=10),
-                titlefont=dict(color='#495057')
+                tickfont=dict(color='#495057', size=10, family='Arial, sans-serif'),
+                showline=False,
+                categoryorder='array',
+                categoryarray=category_array
             ),
             showlegend=False,
-            margin=dict(l=300, r=80, t=20, b=50),
-            autosize=False
+            margin=dict(l=180, r=120, t=20, b=60),
+            hovermode='closest',
+            font=dict(family='Arial, sans-serif', color='#495057'),
+            bargap=0.4
         )
         
         return fig
@@ -269,21 +332,88 @@ def _create_formularios_utilizados_table(df):
         # Formatar % de contribuição
         ranking_df["% de contribuição"] = ranking_df["% de contribuição"].apply(lambda x: f"{x:.2f}%")
         
-        # Criar tabela estilizada
-        table = dbc.Table.from_dataframe(
-            ranking_df,
-            striped=True,
-            bordered=True,
-            hover=True,
-            responsive=True,
-            className="table-sm",
+        # Criar tabela estilizada com estilo similar à overview
+        header_style = {
+            "backgroundColor": "#1e3a5f",
+            "color": "white",
+            "padding": "12px 16px",
+            "position": "sticky",
+            "top": 0,
+            "zIndex": 10,
+            "fontWeight": "bold",
+            "fontSize": "13px",
+            "textAlign": "center",
+            "border": "none",
+            "whiteSpace": "nowrap"
+        }
+        
+        header_cells = [
+            html.Th("Ranking", style={**header_style}),
+            html.Th("Formulário", style={**header_style, "textAlign": "left"}),
+            html.Th("Fluxos Usados", style=header_style),
+            html.Th("Campos", style=header_style),
+            html.Th("% Contribuição", style=header_style)
+        ]
+        
+        header = html.Thead([html.Tr(header_cells)], style={"position": "sticky", "top": 0, "zIndex": 10})
+        
+        body_rows = []
+        cell_style = {
+            "padding": "12px 16px",
+            "border": "1px solid #dee2e6",
+            "fontSize": "13px",
+            "color": "#212529",
+            "whiteSpace": "nowrap",
+            "overflow": "hidden",
+            "textOverflow": "ellipsis"
+        }
+        
+        for idx, row in ranking_df.head(20).iterrows():
+            formulario_text = str(row['Formulário'])
+            if len(formulario_text) > 60:
+                formulario_text = formulario_text[:57] + "..."
+            
+            body_rows.append(
+                html.Tr([
+                    html.Td(str(int(row['Ranking'])), style={**cell_style, "textAlign": "center"}),
+                    html.Td(formulario_text, style={**cell_style, "maxWidth": "400px"}),
+                    html.Td(str(int(row['Fluxos Usados'])), style={**cell_style, "textAlign": "center"}),
+                    html.Td(str(int(row['Campos'])), style={**cell_style, "textAlign": "center"}),
+                    html.Td(row['% de contribuição'], style={**cell_style, "textAlign": "center"})
+                ], style={
+                    "backgroundColor": "#ffffff" if idx % 2 == 0 else "#f8f9fa",
+                    "borderBottom": "1px solid #dee2e6"
+                })
+            )
+        
+        table = dbc.Table([
+            header,
+            html.Tbody(body_rows)
+        ], bordered=False, hover=True, responsive=True, striped=False, 
+        style={
+            "marginBottom": 0,
+            "fontSize": "13px",
+            "width": "100%",
+            "borderCollapse": "separate",
+            "borderSpacing": 0,
+            "borderRadius": "8px",
+            "overflow": "hidden"
+        })
+        
+        tabela_com_scroll = html.Div(
+            table,
             style={
-                "fontSize": "14px",
-                "color": "#495057"
+                "maxHeight": "600px",
+                "overflowY": "auto",
+                "overflowX": "auto",
+                "border": "1px solid #dee2e6",
+                "borderRadius": "8px",
+                "display": "block",
+                "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"
             }
         )
         
-        return table
+        return tabela_com_scroll
     except Exception as e:
         print(f"Erro ao criar tabela de formulários utilizados: {e}")
         import traceback
@@ -303,9 +433,9 @@ def _create_analise_fluxo_complexidade_chart(df):
         # Calcular quantidade total de campos por fluxo (para o eixo Y)
         fluxo_qtd_campos = df.groupby("fluxo")["nomeCampo"].nunique().reset_index(name="qtd_campos_por_fluxo")
         
-        # Calcular padronização (risco): quanto menor a padronização, maior o risco
+        # OTIMIZAÇÃO: Usar coluna is_padronizado já processada
         df_work = df.copy()
-        df_work["is_padronizado"] = df_work["nomeCampo"].apply(_is_padronizado)
+        # is_padronizado já existe no DataFrame processado
         
         # Calcular % de padronização por fluxo (baseado em campos únicos)
         percentuais_fluxos = []

@@ -9,11 +9,18 @@ body {
 /* Estilos para abas - Menu de navegação melhorado */
 .custom-tabs-container {
     margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 .custom-tabs-container .nav-tabs {
     border-bottom: none !important; /* Remove a barra cinza desnecessária */
     margin-bottom: 0;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    width: 100%;
 }
 
 .custom-tabs-container .nav-link {
@@ -22,6 +29,7 @@ body {
     color: #495057;
     padding: 12px 24px;
     margin-right: 8px;
+    margin-left: 4px;
     border-radius: 10px;
     transition: all 0.3s ease;
     font-weight: 500;
@@ -29,6 +37,7 @@ body {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     position: relative;
     overflow: hidden;
+    display: inline-block;
 }
 
 .custom-tabs-container .nav-link::before {
@@ -170,6 +179,16 @@ h1 {
     
     .custom-tab {
         padding: 8px 15px;
+        font-size: 14px;
+    }
+    
+    .custom-tabs-container .nav-tabs {
+        justify-content: center;
+    }
+    
+    .custom-tabs-container .nav-link {
+        margin: 4px;
+        padding: 10px 16px;
         font-size: 14px;
     }
 }

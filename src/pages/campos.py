@@ -4,6 +4,56 @@ from dash import html, dcc
 # Importa componentes do Dash Bootstrap para facilitar o layout com cards, linhas e colunas
 import dash_bootstrap_components as dbc
 
+def create_title_with_tooltip(title_text, tooltip_id, tooltip_content):
+    """
+    Cria um título com ícone de informação e tooltip.
+    
+    Args:
+        title_text: Texto do título
+        tooltip_id: ID único para o tooltip
+        tooltip_content: Conteúdo do tooltip (pode ser HTML)
+    
+    Returns:
+        Componente HTML com título e tooltip
+    """
+    return html.Div([
+        html.H5(
+            [
+                title_text,
+                html.Span(
+                    html.I(
+                        className="fas fa-info-circle",
+                        style={
+                            "marginLeft": "8px",
+                            "color": "#6c757d",
+                            "cursor": "pointer",
+                            "fontSize": "14px"
+                        },
+                        id=tooltip_id
+                    )
+                )
+            ],
+            className="mb-1",
+            style={"fontWeight": "600", "color": "#495057", "display": "flex", "alignItems": "center"}
+        ),
+        dbc.Tooltip(
+            tooltip_content,
+            target=tooltip_id,
+            placement="right",
+            style={
+                "maxWidth": "400px", 
+                "fontSize": "13px",
+                "backgroundColor": "#343a40",
+                "color": "#ffffff",
+                "border": "1px solid #495057",
+                "borderRadius": "8px",
+                "padding": "14px",
+                "boxShadow": "0 4px 12px rgba(0,0,0,0.3)",
+                "zIndex": 1000
+            }
+        )
+    ])
+
 # Função que retorna o layout da página "Campos" (Análise de Campos)
 def campos_layout():
     # Armazena dados filtrados para compartilhamento entre callbacks do Dash
@@ -66,13 +116,37 @@ def campos_layout():
         # Segunda seção: Gráfico - Campos Mais Usados
         dbc.Card(
             dbc.CardBody([
-                html.H5("Campos Mais Usados", className="mb-3", 
-                       style={"fontWeight": "600", "color": "#212529"}),
+                create_title_with_tooltip(
+                    "Campos Mais Usados",
+                    "tooltip-campos-mais-usados",
+                    html.Div([
+                        html.Strong("Nome: ", style={"color": "#ffffff"}),
+                        html.Span("Campos Mais Usados", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                        html.Span("Quantidade total de ocorrências de cada campo no período de referência, ordenados do maior para o menor.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                        html.Span("Contagem de ocorrências únicas de cada campo.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                        html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                        html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                    ])
+                ),
                 dcc.Graph(id='campos-mais-usados', style={"height": "450px"},
                          config={"displayModeBar": False})
             ]),
-            className="mb-4 shadow-sm",
-            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff"}
+            className="mb-4 shadow-lg",
+            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff", "borderRadius": "12px"}
         ),
 
         # Terceira seção: Dois gráficos lado a lado
@@ -81,15 +155,39 @@ def campos_layout():
             dbc.Col([
                 dbc.Card(
                     dbc.CardBody([
-                        html.H5("Campos com Variações", className="mb-3", 
-                               style={"fontWeight": "600", "color": "#212529"}),
+                        create_title_with_tooltip(
+                            "Campos com Variações",
+                            "tooltip-campos-variacoes",
+                            html.Div([
+                                html.Strong("Nome: ", style={"color": "#ffffff"}),
+                                html.Span("Campos com Variações", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                                html.Span("Quantidade de variações de legenda para cada campo, ordenados do maior para o menor.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                                html.Span("Agrupamento por campo e contagem de legendas distintas (variações).", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                                html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                                html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                            ])
+                        ),
                         dcc.Graph(
                             id='campos-com-variacoes',
                             style={"height": "450px"},
                             config={"displayModeBar": False}
                         )
                     ]),
-                    className="mb-4 shadow-sm",
+                    className="mb-4 shadow-lg",
                     style={
                         "border": "1px solid #dee2e6",
                         "backgroundColor": "#ffffff",
@@ -103,14 +201,38 @@ def campos_layout():
             dbc.Col([
                 dbc.Card(
                     dbc.CardBody([
-                        html.H5("Autoria de Dados", className="mb-3", 
-                               style={"fontWeight": "600", "color": "#212529"}),
+                        create_title_with_tooltip(
+                            "Autoria de Dados",
+                            "tooltip-autoria-dados",
+                            html.Div([
+                                html.Strong("Nome: ", style={"color": "#ffffff"}),
+                                html.Span("Autoria de Dados", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                                html.Span("Quantidade de campos distintos criados por cada autor no período de referência.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                                html.Span("Agrupamento por autor e contagem de campos únicos criados.", 
+                                         style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                                html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                                html.Br(),
+                                html.Br(),
+                                html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                                html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                            ])
+                        ),
                         html.Div(
                             id='tabela-autoria-dados',
                             style={"width": "100%", "overflow": "auto"}
                         )
                     ]),
-                    className="mb-4 shadow-sm",
+                    className="mb-4 shadow-lg",
                     style={
                         "border": "1px solid #dee2e6",
                         "backgroundColor": "#ffffff",
@@ -124,13 +246,37 @@ def campos_layout():
         # Quarta seção: Gráfico - Diversidade de Campos por Tipo
         dbc.Card(
             dbc.CardBody([
-                html.H5("Diversidade de Campos por Tipo", className="mb-3", 
-                       style={"fontWeight": "600", "color": "#212529"}),
+                create_title_with_tooltip(
+                    "Diversidade de Campos por Tipo",
+                    "tooltip-diversidade-tipo",
+                    html.Div([
+                        html.Strong("Nome: ", style={"color": "#ffffff"}),
+                        html.Span("Diversidade de Campos por Tipo", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Conceito: ", style={"color": "#ffffff"}),
+                        html.Span("Quantidade de campos por tipo de componente no período de referência.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Método de cálculo: ", style={"color": "#ffffff"}),
+                        html.Span("Agrupamento por tipo de componente e contagem de ocorrências.", 
+                                 style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Periodicidade de atualização: ", style={"color": "#ffffff"}),
+                        html.Span("Trimestral (3 meses).", style={"color": "#e9ecef"}),
+                        html.Br(),
+                        html.Br(),
+                        html.Strong("Fonte: ", style={"color": "#ffffff"}),
+                        html.Span("MongoDB do ACTO - Período: 2024 até setembro de 2025.", style={"color": "#e9ecef"})
+                    ])
+                ),
                 dcc.Graph(id='diversidade-campos-tipo', style={"height": "450px"},
                          config={"displayModeBar": False})
             ]),
-            className="mb-4 shadow-sm",
-            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff"}
+            className="mb-4 shadow-lg",
+            style={"border": "1px solid #dee2e6", "backgroundColor": "#ffffff", "borderRadius": "12px"}
         ),
     ], style={"padding": "20px", "backgroundColor": "#ffffff"})
     

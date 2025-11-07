@@ -152,27 +152,64 @@ def register_chatbot_callbacks(app):
         prevent_initial_call=True
     )
     def send_message(send_clicks, submit_clicks, message, current_messages):
+        """
+        Callback para enviar mensagem do usuário e obter resposta do chatbot.
+        
+        Esta função:
+        - Valida a mensagem
+        - Adiciona mensagem do usuário à interface
+        - Gera resposta usando o chatbot com session_id
+        - Adiciona resposta do bot à interface
+        - Retorna interface atualizada
+        
+        Args:
+            send_clicks: Número de cliques no botão enviar
+            submit_clicks: Número de submits (Enter) no input
+            message: Texto da mensagem do usuário
+            current_messages: Lista atual de mensagens na interface
+            
+        Returns:
+            Tuple: (mensagens_atualizadas, input_limpo, estilo_loading)
+        """
+        # Valida se há mensagem
         if not message:
             return current_messages, "", {"display": "none"}
 
+        # Inicializa lista de mensagens se estiver vazia
         if current_messages is None:
             current_messages = []
 
+        # Cria div para mensagem do usuário
         user_message_div = html.Div(message, className="user-message")
         updated_messages = current_messages + [user_message_div]
 
+        # Estilo para indicador de carregamento
         loading_style = {"display": "block", "textAlign": "center", "padding": "10px"}
 
         try:
-            # Chamar função diretamente em vez de requisição HTTP
-            # Isso evita loop de requisições e erro 502 Bad Gateway
+            # Importa função do chatbot
             from src.chatbot import gerar_resposta
-            bot_response = gerar_resposta(message)
+            import uuid
+            
+            # Gera session_id único baseado no navegador
+            # Em produção, pode usar cookies ou localStorage para manter consistente
+            # Por enquanto, usa um ID fixo baseado no hash da mensagem inicial
+            # Isso mantém contexto durante a sessão do navegador
+            session_id = "dash_session"  # Pode ser melhorado para usar localStorage
+            
+            # Gera resposta do chatbot com contexto
+            bot_response = gerar_resposta(message, session_id)
+            
         except Exception as e:
+            # Em caso de erro, retorna mensagem de erro amigável
+            import logging
+            logging.error(f"Erro ao gerar resposta: {e}")
             bot_response = f"Erro interno do chatbot: {str(e)}"
         
+        # Cria div para resposta do bot
         bot_message_div = html.Div(bot_response, className="bot-message")
         updated_messages.append(bot_message_div)
 
+        # Retorna: mensagens atualizadas, input limpo, loading oculto
         return updated_messages, "", {"display": "none"}
 
