@@ -111,7 +111,7 @@ def create_layout(meta):
         children=html.Div(id="page-content", style={"padding": "10px"}),
         style={"minHeight": "400px"},
         color="#2E86AB",
-        fullscreen=False
+        fullscreen=True
     )
 
     return dbc.Container(
